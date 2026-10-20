@@ -1,159 +1,224 @@
--- MM2 FLAWLESS AUTO-FARM (DELTA MOBILE EDITION)
+-- =================================================================
+-- PROJECT ARGON: MM2 PREMIUM AUTOFARM (DELTA OPTIMIZED)
+-- =================================================================
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local isFarming = false
-local clonesActive = false
-local clonesList = {}
+local farmSpeed = 15 -- Скорость полета (выше = быстрее)
+local collected = 0
 local maxCoins = 50
-local currentCoins = 0
 
--- Очистка старых интерфейсов
-if CoreGui:FindFirstChild("MM2_Flawless_UI") then
-    CoreGui.MM2_Flawless_UI:Destroy()
+-- Очистка старого UI
+if CoreGui:FindFirstChild("ArgonPremiumUI") then
+    CoreGui.ArgonPremiumUI:Destroy()
 end
 
--- ================== МОБИЛЬНЫЙ ИНТЕРФЕЙС ==================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MM2_Flawless_UI"
-ScreenGui.Parent = CoreGui
-ScreenGui.IgnoreGuiInset = true
+-- ================= УМНАЯ НЕВИДИМАЯ ПЛАТФОРМА =================
+-- Это спасет от падений под карту и античита
+local platform = Instance.new("Part")
+platform.Size = Vector3.new(15, 1, 15)
+platform.Transparency = 1 -- Полностью невидимая
+platform.Anchored = true
+platform.CanCollide = true
+platform.Color = Color3.fromRGB(255, 0, 0)
+platform.Material = Enum.Material.ForceField
+platform.Parent = workspace
 
+RunService.Heartbeat:Connect(function()
+    if isFarming then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            -- Платформа всегда висит ровно на 3.5 стада ниже тебя
+            platform.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, -3.5, 0)
+        end
+    else
+        platform.CFrame = CFrame.new(0, -9999, 0) -- Прячем, когда выключено
+    end
+end)
+
+-- ================= ПРЕМИУМ ИНТЕРФЕЙС =================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ArgonPremiumUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Плавающая кнопка-логотип (для скрытия/открытия)
+local ToggleBtn = Instance.new("ImageButton")
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Position = UDim2.new(0, 20, 0.5, -25)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+ToggleBtn.Image = "rbxassetid://6026568227" -- Иконка шестеренки/лого
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+ToggleBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Color = Color3.fromRGB(255, 85, 0)
+ToggleStroke.Thickness = 2
+ToggleStroke.Parent = ToggleBtn
+
+-- Главное окно
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 300, 0, 220)
-MainFrame.Position = UDim2.new(0.5, -150, 0.4, -110)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Size = UDim2.new(0, 350, 0, 240)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -120)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
+MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 12)
-UICorner.Parent = MainFrame
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainShadow = Instance.new("UIStroke")
+MainShadow.Color = Color3.fromRGB(40, 40, 50)
+MainShadow.Thickness = 2
+MainShadow.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Size = UDim2.new(1, 0, 0, 45)
 Title.BackgroundTransparency = 1
-Title.Text = "MM2 HALLOWEEN FARM"
-Title.TextColor3 = Color3.fromRGB(255, 120, 0)
-Title.TextSize = 18
+Title.Text = "ARGON | HALLOWEEN MM2"
+Title.TextColor3 = Color3.fromRGB(255, 85, 0)
+Title.TextSize = 16
 Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
--- Кнопка сворачивания (большая для пальца)
-local HideBtn = Instance.new("TextButton")
-HideBtn.Size = UDim2.new(0, 40, 0, 40)
-HideBtn.Position = UDim2.new(1, -45, 0, 0)
-HideBtn.BackgroundTransparency = 1
-HideBtn.Text = "➖"
-HideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-HideBtn.TextSize = 20
-HideBtn.Parent = MainFrame
-
--- Плавающая кнопка (чтобы открыть обратно)
-local OpenBtn = Instance.new("TextButton")
-OpenBtn.Size = UDim2.new(0, 50, 0, 50)
-OpenBtn.Position = UDim2.new(0, 20, 0.5, 0)
-OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-OpenBtn.Text = "🎃"
-OpenBtn.TextSize = 25
-OpenBtn.Visible = false
-OpenBtn.Active = true
-OpenBtn.Draggable = true
-OpenBtn.Parent = ScreenGui
-
-local OpenCorner = Instance.new("UICorner")
-OpenCorner.CornerRadius = UDim.new(1, 0)
-OpenCorner.Parent = OpenBtn
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 40, 0, 40)
+CloseBtn.Position = UDim2.new(1, -45, 0, 2)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+CloseBtn.TextSize = 18
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = MainFrame
 
 local StatusText = Instance.new("TextLabel")
 StatusText.Size = UDim2.new(1, 0, 0, 30)
 StatusText.Position = UDim2.new(0, 0, 0, 45)
 StatusText.BackgroundTransparency = 1
-StatusText.Text = "Собрано: 0 / 50"
+StatusText.Text = "Конфет: 0 / 50"
 StatusText.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusText.TextSize = 16
-StatusText.Font = Enum.Font.GothamMedium
+StatusText.TextSize = 18
+StatusText.Font = Enum.Font.Gotham
 StatusText.Parent = MainFrame
 
--- Огромная кнопка ФАРМ
+-- Качественный слайдер скорости
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.new(1, -40, 0, 20)
+SpeedLabel.Position = UDim2.new(0, 20, 0, 85)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Text = "Скорость полета: 15"
+SpeedLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+SpeedLabel.TextSize = 13
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.Parent = MainFrame
+
+local SliderBG = Instance.new("Frame")
+SliderBG.Size = UDim2.new(1, -40, 0, 8)
+SliderBG.Position = UDim2.new(0, 20, 0, 110)
+SliderBG.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+SliderBG.Parent = MainFrame
+
+local SliderCorner = Instance.new("UICorner")
+SliderCorner.CornerRadius = UDim.new(1, 0)
+SliderCorner.Parent = SliderBG
+
+local SliderFill = Instance.new("Frame")
+SliderFill.Size = UDim2.new(0.3, 0, 1, 0) -- Дефолтная позиция
+SliderFill.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
+SliderFill.Parent = SliderBG
+
+local SliderFillCorner = Instance.new("UICorner")
+SliderFillCorner.CornerRadius = UDim.new(1, 0)
+SliderFillCorner.Parent = SliderFill
+
+local SliderBtn = Instance.new("TextButton")
+SliderBtn.Size = UDim2.new(1, 0, 1, 10)
+SliderBtn.Position = UDim2.new(0, 0, 0, -5)
+SliderBtn.BackgroundTransparency = 1
+SliderBtn.Text = ""
+SliderBtn.Parent = SliderBG
+
+-- Кнопка старта
 local FarmBtn = Instance.new("TextButton")
-FarmBtn.Size = UDim2.new(0.9, 0, 0, 50)
-FarmBtn.Position = UDim2.new(0.05, 0, 0, 85)
-FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-FarmBtn.Text = "ВКЛЮЧИТЬ ФАРМ"
+FarmBtn.Size = UDim2.new(1, -40, 0, 50)
+FarmBtn.Position = UDim2.new(0, 20, 0, 150)
+FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+FarmBtn.Text = "ЗАПУСТИТЬ ФАРМ"
 FarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-FarmBtn.TextSize = 16
+FarmBtn.TextSize = 14
 FarmBtn.Font = Enum.Font.GothamBold
 FarmBtn.Parent = MainFrame
 
-local FarmCorner = Instance.new("UICorner")
-FarmCorner.CornerRadius = UDim.new(0, 8)
-FarmCorner.Parent = FarmBtn
+local FarmBtnCorner = Instance.new("UICorner")
+FarmBtnCorner.CornerRadius = UDim.new(0, 8)
+FarmBtnCorner.Parent = FarmBtn
 
--- Огромная кнопка КЛОНЫ
-local CloneBtn = Instance.new("TextButton")
-CloneBtn.Size = UDim2.new(0.9, 0, 0, 50)
-CloneBtn.Position = UDim2.new(0.05, 0, 0, 145)
-CloneBtn.BackgroundColor3 = Color3.fromRGB(40, 60, 150)
-CloneBtn.Text = "КЛОНЫ: ВЫКЛ"
-CloneBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloneBtn.TextSize = 16
-CloneBtn.Font = Enum.Font.GothamBold
-CloneBtn.Parent = MainFrame
+local FarmBtnStroke = Instance.new("UIStroke")
+FarmBtnStroke.Color = Color3.fromRGB(255, 85, 0)
+FarmBtnStroke.Thickness = 1
+FarmBtnStroke.Parent = FarmBtn
 
-local CloneCorner = Instance.new("UICorner")
-CloneCorner.CornerRadius = UDim.new(0, 8)
-CloneCorner.Parent = CloneBtn
-
--- ================== ЛОГИКА UI ==================
-HideBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-    OpenBtn.Visible = true
-end)
-
-OpenBtn.MouseButton1Click:Connect(function()
+-- ================= ЛОГИКА ИНТЕРФЕЙСА =================
+ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = true
-    OpenBtn.Visible = false
+    ToggleBtn.Visible = false
 end)
 
--- ================== ФИЗИКА И АНТИ-ПАДЕНИЕ ==================
-local function getHRP()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-        return char.HumanoidRootPart, char.Humanoid
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    ToggleBtn.Visible = true
+end)
+
+local isDraggingSlider = false
+SliderBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = true
     end
-    return nil, nil
-end
+end)
 
-local function applyAntiFall(hrp)
-    -- Идеальный якорь без блокировки движения скриптом
-    local bv = hrp:FindFirstChild("AntiFallVelocity")
-    if not bv then
-        bv = Instance.new("BodyVelocity")
-        bv.Name = "AntiFallVelocity"
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = Vector3.new(0, 0, 0)
-        bv.Parent = hrp
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = false
     end
-end
+end)
 
-local function removeAntiFall(hrp)
-    local bv = hrp:FindFirstChild("AntiFallVelocity")
-    if bv then bv:Destroy() end
-end
+RunService.RenderStepped:Connect(function()
+    if isDraggingSlider then
+        local mousePos = UserInputService:GetMouseLocation().X
+        local bgPos = SliderBG.AbsolutePosition.X
+        local bgSize = SliderBG.AbsoluteSize.X
+        local percent = math.clamp((mousePos - bgPos) / bgSize, 0, 1)
+        
+        SliderFill.Size = UDim2.new(percent, 0, 1, 0)
+        -- Скорость от 5 (медленно, сейвово) до 50 (супер быстро)
+        farmSpeed = math.floor(5 + (percent * 45))
+        SpeedLabel.Text = "Скорость полета: " .. farmSpeed
+    end
+end)
 
--- ================== ПОИСК КОНФЕТ MM2 ==================
-local function getValidCandy()
+-- ================= ЛОГИКА ФАРМА =================
+local function getCandy()
     local normal = workspace:FindFirstChild("Normal")
     if normal then
         local coinContainer = normal:FindFirstChild("CoinContainer")
         if coinContainer then
             for _, coin in ipairs(coinContainer:GetChildren()) do
-                if coin:IsA("BasePart") and coin.Transparency < 1 then
+                if coin:IsA("BasePart") and coin.Transparency < 1 and coin.Position.Y > -100 then
                     return coin
                 end
             end
@@ -162,128 +227,95 @@ local function getValidCandy()
     return nil
 end
 
--- ================== ЛОГИКА КЛОНОВ ==================
-local function clearClones()
-    for _, c in ipairs(clonesList) do
-        if c and c.Parent then c:Destroy() end
+local currentTween = nil
+
+local function stopFarm()
+    isFarming = false
+    FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    FarmBtn.Text = "ЗАПУСТИТЬ ФАРМ"
+    FarmBtnStroke.Color = Color3.fromRGB(255, 85, 0)
+    if currentTween then currentTween:Cancel() end
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.Anchored = false
     end
-    clonesList = {}
 end
 
-CloneBtn.MouseButton1Click:Connect(function()
-    clonesActive = not clonesActive
-    if clonesActive then
-        CloneBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 60)
-        CloneBtn.Text = "КЛОНЫ: ВКЛ"
-    else
-        CloneBtn.BackgroundColor3 = Color3.fromRGB(40, 60, 150)
-        CloneBtn.Text = "КЛОНЫ: ВЫКЛ"
-        clearClones()
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.5) do
-        if clonesActive and isFarming then
-            local hrp = getHRP()
-            local char = LocalPlayer.Character
-            if hrp and char then
-                if #clonesList < 4 then
-                    -- Безопасное клонирование через Archivable
-                    char.Archivable = true
-                    local success, clone = pcall(function() return char:Clone() end)
-                    
-                    if success and clone then
-                        clone.Name = "GhostClone"
-                        -- Жестко удаляем всё, что может крашнуть игру
-                        for _, v in ipairs(clone:GetDescendants()) do
-                            if v:IsA("Script") or v:IsA("LocalScript") then
-                                v:Destroy()
-                            elseif v:IsA("BasePart") then
-                                v.CanCollide = false
-                                v.Anchored = true
-                                v.Massless = true
-                            end
-                        end
-                        clone.Parent = workspace
-                        table.insert(clonesList, clone)
-                    end
-                end
-                
-                -- Крутим клонов вокруг тебя
-                for i, c in ipairs(clonesList) do
-                    local cloneRoot = c:FindFirstChild("HumanoidRootPart")
-                    if cloneRoot then
-                        local angle = (i / #clonesList) * math.pi * 2
-                        cloneRoot.CFrame = hrp.CFrame * CFrame.new(math.cos(angle) * 4, 0, math.sin(angle) * 4)
-                    end
-                end
-            end
-        elseif #clonesList > 0 then
-            clearClones()
-        end
-    end
-end)
-
--- ================== ЛОГИКА ФАРМА ==================
 FarmBtn.MouseButton1Click:Connect(function()
-    isFarming = not isFarming
     if isFarming then
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
-        FarmBtn.Text = "ФАРМ ИДЕТ..."
-        currentCoins = 0
-        StatusText.Text = "Собрано: 0 / 50"
+        stopFarm()
     else
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-        FarmBtn.Text = "ВКЛЮЧИТЬ ФАРМ"
-        local hrp = getHRP()
-        if hrp then removeAntiFall(hrp) end
+        isFarming = true
+        collected = 0
+        StatusText.Text = "Конфет: 0 / 50"
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
+        FarmBtn.Text = "ОСТАНОВИТЬ ФАРМ"
+        FarmBtnStroke.Color = Color3.fromRGB(255, 255, 255)
     end
 end)
 
 task.spawn(function()
     while task.wait(0.1) do
         if isFarming then
-            local hrp, hum = getHRP()
-            if hrp and hum and hum.Health > 0 then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local hrp = char.HumanoidRootPart
+                local hum = char.Humanoid
                 
-                if currentCoins >= maxCoins then
-                    StatusText.Text = "ЛИМИТ! РЕСПАВН..."
-                    removeAntiFall(hrp)
-                    clearClones()
-                    hum.Health = 0 -- Убиваем персонажа для сброса раунда
-                    currentCoins = 0
-                    task.wait(4)
+                if hum.Health <= 0 then
+                    stopFarm()
                     continue
                 end
 
-                local candy = getValidCandy()
+                if collected >= maxCoins then
+                    StatusText.Text = "ЛИМИТ! Ожидание..."
+                    stopFarm()
+                    hum.Health = 0 -- Автоматический рип
+                    continue
+                end
+
+                local candy = getCandy()
                 if candy then
-                    -- Включаем анти-падение
-                    applyAntiFall(hrp)
-                    
-                    -- Телепорт прямо в центр конфеты
-                    hrp.CFrame = candy.CFrame
-                    
-                    -- Ждем пока сервер засчитает сбор (конфета исчезнет)
-                    local timeout = 0
-                    while candy.Parent and candy.Transparency < 1 and isFarming and timeout < 10 do
-                        hrp.CFrame = candy.CFrame
-                        task.wait(0.1)
-                        timeout = timeout + 1
+                    -- Отключаем коллизию, чтобы лететь сквозь стены
+                    for _, v in ipairs(char:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
                     end
+
+                    -- Точка ровно НАД конфетой, чтобы не задеть текстуры пола
+                    local targetPos = candy.Position + Vector3.new(0, 1.5, 0)
+                    local distance = (hrp.Position - targetPos).Magnitude
                     
-                    if timeout < 10 then
-                        currentCoins = currentCoins + 1
-                        StatusText.Text = "Собрано: " .. currentCoins .. " / 50"
+                    -- Рассчитываем время полета на основе выбранной скорости
+                    local tweenTime = distance / farmSpeed
+                    if tweenTime < 0.1 then tweenTime = 0.1 end
+
+                    local tweenInfo = TweenInfo.new(tweenTime, Enum.EasingStyle.Linear)
+                    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(targetPos)})
+                    
+                    hrp.Anchored = true
+                    currentTween:Play()
+                    currentTween.Completed:Wait()
+                    
+                    if isFarming and candy and candy.Parent then
+                        -- Эмуляция касания
+                        if firetouchinterest then
+                            firetouchinterest(hrp, candy, 0)
+                            task.wait(0.05)
+                            firetouchinterest(hrp, candy, 1)
+                        end
+                        
+                        task.wait(0.1) -- Даем серверу долю секунды на регистрацию
+                        
+                        -- Проверяем, исчезла ли конфета
+                        if not candy.Parent or candy.Transparency >= 1 then
+                            collected = collected + 1
+                            StatusText.Text = "Конфет: " .. collected .. " / 50"
+                        end
                     end
+                else
+                    hrp.Anchored = false
                 end
             end
         end
     end
-end)
-
--- Очистка при респавне
-LocalPlayer.CharacterAdded:Connect(function()
-    clearClones()
 end)
