@@ -1,133 +1,176 @@
--- MM2 Event Auto-Farm & Clone Godmode (Fixed & Scaled UI)
+-- MM2 HALLOWEEN ULTIMATE FARM & CLONES (MOBILE / DELTA)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Настройки
-local isFarming = false
-local isCloning = false
-local farmSpeed = 0.1
-local cloneCount = 5
-local collected = 0
-local maxLimit = 50
-local isProcessing = false
-local myClones = {}
+local settings = {
+    farmActive = false,
+    clonesActive = false,
+    speed = 0.15,
+    cloneCount = 4,
+    collected = 0,
+    maxLimit = 50,
+    undergroundOffset = 3.5 -- глубина под конфету (не проваливает под карту)
+}
 
--- ================= УЛУЧШЕННОЕ МЕНЮ (АДАПТИРОВАННОЕ) =================
-if CoreGui:FindFirstChild("MM2_Fixed_Farm_GUI") then
-    CoreGui.MM2_Fixed_Farm_GUI:Destroy()
+local currentClones = {}
+local isBusy = false
+
+-- Удаление старого UI
+if CoreGui:FindFirstChild("MM2_MobileHub") then
+    CoreGui.MM2_MobileHub:Destroy()
 end
 
+-- ================= ИНТЕРФЕЙС =================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MM2_Fixed_Farm_GUI"
+ScreenGui.Name = "MM2_MobileHub"
 ScreenGui.Parent = CoreGui
 ScreenGui.IgnoreGuiInset = true
 
+-- Главное горизонтальное окно
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 320, 0, 420)
-Main.Position = UDim2.new(0.5, -160, 0.5, -210)
-Main.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+Main.Name = "MainWindow"
+Main.Size = UDim2.new(0, 380, 0, 210)
+Main.Position = UDim2.new(0.5, -190, 0.4, -105)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Main.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.CornerRadius = UDim.new(0, 10)
 MainCorner.Parent = Main
 
 local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(70, 70, 90)
-MainStroke.Thickness = 2
+MainStroke.Color = Color3.fromRGB(60, 60, 80)
+MainStroke.Thickness = 1.5
 MainStroke.Parent = Main
 
--- Заголовок
+-- Шапка
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 35)
+Header.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+Header.BorderSizePixel = 0
+Header.Parent = Main
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 10)
+HeaderCorner.Parent = Header
+
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 45)
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-Title.Text = "  MM2 HALLOWEEN AUTO-FARM"
+Title.Size = UDim2.new(1, -50, 1, 0)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "MM2 HALLOWEEN V4 | DELTA"
 Title.TextColor3 = Color3.fromRGB(255, 140, 0)
-Title.TextSize = 15
+Title.TextSize = 13
 Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = Main
+Title.Parent = Header
 
-local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 12)
-TitleCorner.Parent = Title
+-- Кнопка скрыть [-]
+local HideBtn = Instance.new("TextButton")
+HideBtn.Size = UDim2.new(0, 30, 0, 25)
+HideBtn.Position = UDim2.new(1, -38, 0, 5)
+HideBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+HideBtn.Text = "-"
+HideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HideBtn.TextSize = 16
+HideBtn.Font = Enum.Font.GothamBold
+HideBtn.Parent = Header
 
--- Фикс скругления шапки
-local TitleFix = Instance.new("Frame")
-TitleFix.Size = UDim2.new(1, 0, 0, 12)
-TitleFix.Position = UDim2.new(0, 0, 1, -12)
-TitleFix.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-TitleFix.BorderSizePixel = 0
-TitleFix.Parent = Title
+local HideCorner = Instance.new("UICorner")
+HideCorner.CornerRadius = UDim.new(0, 6)
+HideCorner.Parent = HideBtn
+
+-- Плавающая кнопка для открытия
+local FloatBtn = Instance.new("TextButton")
+FloatBtn.Size = UDim2.new(0, 50, 0, 50)
+FloatBtn.Position = UDim2.new(0, 15, 0.4, 0)
+FloatBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+FloatBtn.Text = "MM2"
+FloatBtn.TextColor3 = Color3.fromRGB(255, 140, 0)
+FloatBtn.TextSize = 14
+FloatBtn.Font = Enum.Font.GothamBold
+FloatBtn.Active = true
+FloatBtn.Draggable = true
+FloatBtn.Visible = false
+FloatBtn.Parent = ScreenGui
+
+local FloatCorner = Instance.new("UICorner")
+FloatCorner.CornerRadius = UDim.new(1, 0)
+FloatCorner.Parent = FloatBtn
+
+local FloatStroke = Instance.new("UIStroke")
+FloatStroke.Color = Color3.fromRGB(255, 140, 0)
+FloatStroke.Thickness = 2
+FloatStroke.Parent = FloatBtn
 
 -- Статус
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -30, 0, 25)
-StatusLabel.Position = UDim2.new(0, 15, 0, 55)
+StatusLabel.Size = UDim2.new(1, -24, 0, 20)
+StatusLabel.Position = UDim2.new(0, 12, 0, 42)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Конфет собрано: 0 / 50"
-StatusLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-StatusLabel.TextSize = 13
+StatusLabel.Text = "Конфет: 0 / 50"
+StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+StatusLabel.TextSize = 12
 StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = Main
 
--- Кнопка Фарм
+-- Кнопки действий
 local FarmBtn = Instance.new("TextButton")
-FarmBtn.Size = UDim2.new(0.9, 0, 0, 45)
-FarmBtn.Position = UDim2.new(0.05, 0, 0, 90)
-FarmBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-FarmBtn.Text = "Включить автофарм"
+FarmBtn.Size = UDim2.new(0.46, 0, 0, 40)
+FarmBtn.Position = UDim2.new(0.03, 0, 0, 68)
+FarmBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
+FarmBtn.Text = "Автофарм: ВЫКЛ"
 FarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-FarmBtn.TextSize = 14
+FarmBtn.TextSize = 12
 FarmBtn.Font = Enum.Font.GothamBold
 FarmBtn.Parent = Main
 
-local FarmBtnCorner = Instance.new("UICorner")
-FarmBtnCorner.CornerRadius = UDim.new(0, 8)
-FarmBtnCorner.Parent = FarmBtn
+local FarmCorner = Instance.new("UICorner")
+FarmCorner.CornerRadius = UDim.new(0, 8)
+FarmCorner.Parent = FarmBtn
 
--- Кнопка Клоны
 local CloneBtn = Instance.new("TextButton")
-CloneBtn.Size = UDim2.new(0.9, 0, 0, 45)
-CloneBtn.Position = UDim2.new(0.05, 0, 0, 145)
-CloneBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 110)
-CloneBtn.Text = "Создать клонов (ВЫКЛ)"
+CloneBtn.Size = UDim2.new(0.46, 0, 0, 40)
+CloneBtn.Position = UDim2.new(0.51, 0, 0, 68)
+CloneBtn.BackgroundColor3 = Color3.fromRGB(45, 55, 120)
+CloneBtn.Text = "Клоны: ВЫКЛ"
 CloneBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloneBtn.TextSize = 14
+CloneBtn.TextSize = 12
 CloneBtn.Font = Enum.Font.GothamBold
 CloneBtn.Parent = Main
 
-local CloneBtnCorner = Instance.new("UICorner")
-CloneBtnCorner.CornerRadius = UDim.new(0, 8)
-CloneBtnCorner.Parent = CloneBtn
+local CloneCorner = Instance.new("UICorner")
+CloneCorner.CornerRadius = UDim.new(0, 8)
+CloneCorner.Parent = CloneBtn
 
--- Ползунок скорости
+-- Скорость
 local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Size = UDim2.new(1, -30, 0, 25)
-SpeedLabel.Position = UDim2.new(0, 15, 0, 205)
+SpeedLabel.Size = UDim2.new(1, -24, 0, 18)
+SpeedLabel.Position = UDim2.new(0, 12, 0, 118)
 SpeedLabel.BackgroundTransparency = 1
-SpeedLabel.Text = "Задержка телепорта: 0.10 сек"
-SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-SpeedLabel.TextSize = 13
+SpeedLabel.Text = "Задержка сбора: 0.15с"
+SpeedLabel.TextColor3 = Color3.fromRGB(160, 160, 170)
+SpeedLabel.TextSize = 11
 SpeedLabel.Font = Enum.Font.Gotham
 SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
 SpeedLabel.Parent = Main
 
 local SpeedBar = Instance.new("Frame")
-SpeedBar.Size = UDim2.new(0.9, 0, 0, 10)
-SpeedBar.Position = UDim2.new(0.05, 0, 0, 235)
-SpeedBar.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+SpeedBar.Size = UDim2.new(0.94, 0, 0, 8)
+SpeedBar.Position = UDim2.new(0.03, 0, 0, 138)
+SpeedBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 SpeedBar.Parent = Main
 
 local SpeedFill = Instance.new("Frame")
-SpeedFill.Size = UDim2.new(0.5, 0, 1, 0)
+SpeedFill.Size = UDim2.new(0.3, 0, 1, 0)
 SpeedFill.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
 SpeedFill.BorderSizePixel = 0
 SpeedFill.Parent = SpeedBar
@@ -140,96 +183,81 @@ local SpeedFillCorner = Instance.new("UICorner")
 SpeedFillCorner.CornerRadius = UDim.new(1, 0)
 SpeedFillCorner.Parent = SpeedFill
 
--- Клоны настройки (кнопки + и -)
-local CountLabel = Instance.new("TextLabel")
-CountLabel.Size = UDim2.new(1, -30, 0, 25)
-CountLabel.Position = UDim2.new(0, 15, 0, 265)
-CountLabel.BackgroundTransparency = 1
-CountLabel.Text = "Количество клонов: 5"
-CountLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-CountLabel.TextSize = 13
-CountLabel.Font = Enum.Font.Gotham
-CountLabel.TextXAlignment = Enum.TextXAlignment.Left
-CountLabel.Parent = Main
+-- Кнопки изменения клонов
+local CloneCountText = Instance.new("TextLabel")
+CloneCountText.Size = UDim2.new(0.6, 0, 0, 24)
+CloneCountText.Position = UDim2.new(0.03, 0, 0, 160)
+CloneCountText.BackgroundTransparency = 1
+CloneCountText.Text = "Количество клонов: 4"
+CloneCountText.TextColor3 = Color3.fromRGB(160, 160, 170)
+CloneCountText.TextSize = 11
+CloneCountText.Font = Enum.Font.Gotham
+CloneCountText.TextXAlignment = Enum.TextXAlignment.Left
+CloneCountText.Parent = Main
 
 local MinusBtn = Instance.new("TextButton")
-MinusBtn.Size = UDim2.new(0, 50, 0, 35)
-MinusBtn.Position = UDim2.new(0.05, 0, 0, 295)
-MinusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+MinusBtn.Size = UDim2.new(0, 32, 0, 24)
+MinusBtn.Position = UDim2.new(0.72, 0, 0, 160)
+MinusBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MinusBtn.Text = "-"
 MinusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinusBtn.TextSize = 20
 MinusBtn.Font = Enum.Font.GothamBold
 MinusBtn.Parent = Main
 
-local MinusCorner = Instance.new("UICorner")
-MinusCorner.CornerRadius = UDim.new(0, 6)
-MinusCorner.Parent = MinusBtn
-
 local PlusBtn = Instance.new("TextButton")
-PlusBtn.Size = UDim2.new(0, 50, 0, 35)
-PlusBtn.Position = UDim2.new(0.05, 60, 0, 295)
-PlusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+PlusBtn.Size = UDim2.new(0, 32, 0, 24)
+PlusBtn.Position = UDim2.new(0.86, 0, 0, 160)
+PlusBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 PlusBtn.Text = "+"
 PlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PlusBtn.TextSize = 20
 PlusBtn.Font = Enum.Font.GothamBold
 PlusBtn.Parent = Main
 
-local PlusCorner = Instance.new("UICorner")
-PlusCorner.CornerRadius = UDim.new(0, 6)
-PlusCorner.Parent = PlusBtn
+-- ================= ОБРАБОТКА ИНТЕРФЕЙСА =================
 
--- Подсказка внизу
-local Credits = Instance.new("TextLabel")
-Credits.Size = UDim2.new(1, 0, 0, 20)
-Credits.Position = UDim2.new(0, 0, 1, -25)
-Credits.BackgroundTransparency = 1
-Credits.Text = "Delta Executor Ready"
-Credits.TextColor3 = Color3.fromRGB(100, 100, 120)
-Credits.TextSize = 11
-Credits.Font = Enum.Font.Gotham
-Credits.Parent = Main
+HideBtn.MouseButton1Click:Connect(function()
+    Main.Visible = false
+    FloatBtn.Visible = true
+end)
 
--- ================= УПРАВЛЕНИЕ UI =================
+FloatBtn.MouseButton1Click:Connect(function()
+    Main.Visible = true
+    FloatBtn.Visible = false
+end)
 
 SpeedBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local mouseX = input.Position.X
-        local barPos = SpeedBar.AbsolutePosition.X
-        local barSize = SpeedBar.AbsoluteSize.X
-        local percent = math.clamp((mouseX - barPos) / barSize, 0, 1)
-        
-        SpeedFill.Size = UDim2.new(percent, 0, 1, 0)
-        farmSpeed = math.clamp(0.05 + (percent * 0.95), 0.05, 1.0)
-        SpeedLabel.Text = string.format("Задержка телепорта: %.2f сек", farmSpeed)
+        local ratio = math.clamp((input.Position.X - SpeedBar.AbsolutePosition.X) / SpeedBar.AbsoluteSize.X, 0, 1)
+        SpeedFill.Size = UDim2.new(ratio, 0, 1, 0)
+        settings.speed = math.clamp(0.05 + (ratio * 0.5), 0.05, 0.55)
+        SpeedLabel.Text = string.format("Задержка сбора: %.2fс", settings.speed)
     end
 end)
 
 MinusBtn.MouseButton1Click:Connect(function()
-    if cloneCount > 1 then
-        cloneCount = cloneCount - 1
-        CountLabel.Text = "Количество клонов: " .. cloneCount
+    if settings.cloneCount > 1 then
+        settings.cloneCount -= 1
+        CloneCountText.Text = "Количество клонов: " .. settings.cloneCount
     end
 end)
 
 PlusBtn.MouseButton1Click:Connect(function()
-    if cloneCount < 15 then
-        cloneCount = cloneCount + 1
-        CountLabel.Text = "Количество клонов: " .. cloneCount
+    if settings.cloneCount < 10 then
+        settings.cloneCount += 1
+        CloneCountText.Text = "Количество клонов: " .. settings.cloneCount
     end
 end)
 
 FarmBtn.MouseButton1Click:Connect(function()
-    isFarming = not isFarming
-    if isFarming then
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-        FarmBtn.Text = "Автофарм: ВКЛЮЧЕН"
-        collected = 0
-        StatusLabel.Text = "Конфет собрано: 0 / 50"
+    settings.farmActive = not settings.farmActive
+    if settings.farmActive then
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 40)
+        FarmBtn.Text = "Автофарм: ВКЛ"
+        settings.collected = 0
+        StatusLabel.Text = "Конфет: 0 / 50"
     else
-        FarmBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        FarmBtn.Text = "Включить автофарм"
+        FarmBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45)
+        FarmBtn.Text = "Автофарм: ВЫКЛ"
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             char.HumanoidRootPart.Anchored = false
@@ -237,163 +265,189 @@ FarmBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-CloneBtn.MouseButton1Click:Connect(function()
-    isCloning = not isCloning
-    if isCloning then
-        CloneBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 200)
-        CloneBtn.Text = "Клоны: ВКЛЮЧЕНЫ"
-    else
-        CloneBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 110)
-        CloneBtn.Text = "Создать клонов (ВЫКЛ)"
-    end
-end)
-
--- ================= СКРИПТОВЫЕ ФУНКЦИИ =================
-
-local function getCharParts()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-        return char.HumanoidRootPart, char.Humanoid, char
-    end
-    return nil, nil, nil
-end
-
-local function clearClones()
-    for _, clone in ipairs(myClones) do
+local function removeClones()
+    for _, clone in ipairs(currentClones) do
         if clone and clone.Parent then
             clone:Destroy()
         end
     end
-    myClones = {}
+    currentClones = {}
 end
 
--- Поиск конфет по всем папкам и частям
-local function getCandy()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local name = string.lower(obj.Name)
-            -- Проверяем распространенные имена эвентовых предметов в MM2
-            if name:find("candy") or name:find("konfeta") or name:find("token") or name:find("coin") or name:find("drop") then
-                -- Убедимся, что у объекта есть реальная позиция и он активен
-                if obj.Transparency < 1 and obj.Position.Magnitude > 0 then
-                    return obj
+CloneBtn.MouseButton1Click:Connect(function()
+    settings.clonesActive = not settings.clonesActive
+    if settings.clonesActive then
+        CloneBtn.BackgroundColor3 = Color3.fromRGB(40, 110, 200)
+        CloneBtn.Text = "Клоны: ВКЛ"
+    else
+        CloneBtn.BackgroundColor3 = Color3.fromRGB(45, 55, 120)
+        CloneBtn.Text = "Клоны: ВЫКЛ"
+        removeClones()
+    end
+end)
+
+-- ================= ПОИСК КОНФЕТ В MM2 =================
+
+-- Ищет контейнер монет конкретно для карты MM2
+local function getCandyList()
+    local list = {}
+    
+    -- 1. Стандартное расположение монет в MM2
+    for _, map in ipairs(workspace:GetChildren()) do
+        local container = map:FindFirstChild("CoinContainer")
+        if container then
+            for _, coin in ipairs(container:GetChildren()) do
+                if coin:IsA("BasePart") and coin.Transparency < 1 then
+                    table.insert(list, coin)
                 end
             end
         end
     end
-    return nil
+    
+    -- 2. Если на карте нестандартная структура ивента
+    if #list == 0 then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Transparency < 1 then
+                local name = string.lower(obj.Name)
+                if name:find("coin") or name:find("candy") or name:find("token") or name:find("sweet") then
+                    table.insert(list, obj)
+                end
+            end
+        end
+    end
+    
+    return list
 end
 
--- Сброс при смерти
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    clearClones()
-    isProcessing = false
-end)
-
--- Защита от падений
+-- ================= ФИКС ПАДЕНИЯ И NOCLIP =================
 RunService.Stepped:Connect(function()
-    if isFarming and not isProcessing then
-        local hrp = getCharParts()
-        if hrp then
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        end
-    end
-end)
-
--- Основной цикл автофарма
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if isFarming and not isProcessing then
-            local hrp, humanoid = getCharParts()
-            
-            if hrp and humanoid and humanoid.Health > 0 then
-                if collected >= maxLimit then
-                    StatusLabel.Text = "Лимит 50 достигнут! Респавн..."
-                    isProcessing = true
-                    collected = 0
-                    clearClones()
-                    hrp.Anchored = false
-                    humanoid.Health = 0 -- Сброс раунда
-                    task.wait(4)
-                    isProcessing = false
-                    continue
+    if settings.farmActive then
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
                 end
-
-                local candy = getCandy()
-                if candy then
-                    isProcessing = true
-                    hrp.Anchored = true
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    
-                    -- Телепорт строго под конфету (на 8 блоков ниже, чтобы хитбокс задел)
-                    hrp.CFrame = CFrame.new(candy.Position - Vector3.new(0, 8, 0))
-
-                    -- Попытка программного касания
-                    if firetouchinterest then
-                        pcall(function()
-                            firetouchinterest(hrp, candy, 0)
-                            task.wait(0.02)
-                            firetouchinterest(hrp, candy, 1)
-                        end)
-                    end
-
-                    task.wait(farmSpeed)
-
-                    -- Если конфета подобрана (исчезла)
-                    if not candy.Parent or candy.Transparency >= 1 then
-                        collected = collected + 1
-                        StatusLabel.Text = "Конфет собрано: " .. collected .. " / 50"
-                    end
-                    
-                    hrp.Anchored = false
-                    isProcessing = false
-                end
+            end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- Полная остановка гравитационного ускорения
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             end
         end
     end
 end)
 
--- Цикл клонов
+-- ================= ЦИКЛ ФАРМА =================
 task.spawn(function()
     while true do
-        task.wait(0.4)
-        if isCloning and isFarming then
-            local hrp, humanoid, char = getCharParts()
-            
-            if hrp and humanoid and humanoid.Health > 0 and char then
-                if #myClones < cloneCount then
-                    local clone = char:Clone()
-                    clone.Name = "MM2_Dummy_Clone"
+        task.wait(0.04)
+        if settings.farmActive and not isBusy then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local hrp = char.HumanoidRootPart
+                local hum = char.Humanoid
+                
+                if hum.Health > 0 then
+                    -- Проверка достижения лимита
+                    if settings.collected >= settings.maxLimit then
+                        StatusLabel.Text = "Собрано 50! Респавн..."
+                        isBusy = true
+                        settings.collected = 0
+                        removeClones()
+                        hrp.Anchored = false
+                        hum.Health = 0
+                        task.wait(4.5)
+                        isBusy = false
+                        continue
+                    end
                     
-                    -- Очистка от скриптов чтобы не крашило клиент
-                    for _, d in ipairs(clone:GetDescendants()) do
-                        if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Humanoid") or d:IsA("Sound") then
-                            d:Destroy()
-                        elseif d:IsA("BasePart") then
-                            d.CanCollide = false
-                            d.Anchored = true
+                    local candies = getCandyList()
+                    if #candies > 0 then
+                        -- Берем ближайшую или первую попавшуюся
+                        local target = candies[1]
+                        if target and target.Parent then
+                            isBusy = true
+                            
+                            -- Ставим позицию ровно под конфету, но БЕЗ падения в пустоту
+                            local targetPos = target.Position - Vector3.new(0, settings.undergroundOffset, 0)
+                            hrp.CFrame = CFrame.new(targetPos)
+                            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            
+                            -- Физическое касание хитбоксом
+                            if firetouchinterest then
+                                pcall(function()
+                                    firetouchinterest(hrp, target, 0)
+                                    task.wait(0.02)
+                                    firetouchinterest(hrp, target, 1)
+                                end)
+                            end
+                            
+                            task.wait(settings.speed)
+                            
+                            if not target.Parent or target.Transparency >= 1 then
+                                settings.collected += 1
+                                StatusLabel.Text = "Конфет: " .. settings.collected .. " / " .. settings.maxLimit
+                            end
+                            
+                            isBusy = false
                         end
                     end
-                    
-                    clone.Parent = workspace
-                    table.insert(myClones, clone)
                 end
-                
-                -- Расстановка клонов вокруг игрока
-                for i, clone in ipairs(myClones) do
-                    if clone and clone:FindFirstChild("HumanoidRootPart") then
-                        local angle = (i / cloneCount) * math.pi * 2
-                        local xOffset = math.cos(angle) * 3.5
-                        local zOffset = math.sin(angle) * 3.5
-                        clone.HumanoidRootPart.CFrame = hrp.CFrame * CFrame.new(xOffset, 0, zOffset)
+            end
+        end
+    end
+end)
+
+-- ================= ЦИКЛ КЛОНОВ =================
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if settings.clonesActive and settings.farmActive then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local hrp = char.HumanoidRootPart
+                if char.Humanoid.Health > 0 then
+                    if #currentClones < settings.cloneCount then
+                        local fakeChar = Instance.new("Model")
+                        fakeChar.Name = "DeceptionClone"
+                        
+                        -- Копируем только части тела без контроллеров и анимаций
+                        for _, part in ipairs(char:GetChildren()) do
+                            if part:IsA("BasePart") or part:IsA("Accessory") then
+                                local clonedPart = part:Clone()
+                                if clonedPart:IsA("BasePart") then
+                                    clonedPart.CanCollide = false
+                                    clonedPart.Anchored = true
+                                end
+                                clonedPart.Parent = fakeChar
+                            end
+                        end
+                        
+                        fakeChar.Parent = workspace
+                        table.insert(currentClones, fakeChar)
+                    end
+                    
+                    -- Размещение по кругу вокруг настоящей позиции
+                    for i, clone in ipairs(currentClones) do
+                        local root = clone:FindFirstChild("HumanoidRootPart") or clone:FindFirstChild("Torso")
+                        if root then
+                            local angle = (i / #currentClones) * (math.pi * 2)
+                            local offset = Vector3.new(math.cos(angle) * 4, 0, math.sin(angle) * 4)
+                            root.CFrame = hrp.CFrame + offset
+                        end
                     end
                 end
             end
         else
-            if #myClones > 0 then
-                clearClones()
+            if #currentClones > 0 then
+                removeClones()
             end
         end
     end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    isBusy = false
+    removeClones()
 end)
