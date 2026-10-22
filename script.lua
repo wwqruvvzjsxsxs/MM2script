@@ -1,56 +1,39 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
 local VirtualUser = game:GetService("VirtualUser")
 local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local StarterGui = game:GetService("StarterGui")
+local Stats = game:GetService("Stats")
 local lp = Players.LocalPlayer
-local FILE = "farm_settings.json"
-
--- ===== слова для поиска (допиши свои, маленькими буквами) =====
-local BOLT_WORDS = {"lightning", "bolt", "speed", "молни"}
-local COIN_WORDS = {"coin", "coins", "монет"}
-local EVENT_WORDS = {"candy", "candies", "pumpkin", "halloween", "sweet", "treat", "lollipop",
-    "jack", "ghost", "spooky", "orb", "конфет", "тыкв"}
-local BLACK_WORDS = {"kill", "lava", "damage", "trap", "spike", "portal", "teleport", "spawn",
-    "door", "shop", "sell", "buy", "death", "hurt", "void"}
--- кириллицу пишем без первой буквы: ловит и "Переполнен", и "переполнен"
-local FULL_WORDS = {"ереполн", "ЕРЕПОЛН", "полон", "Полон", "ПОЛОН", "is full",
-    "inventory full", "bag full", "backpack full"}
+local FILE = "night_settings.json"
+local T0 = os.clock()
 
 -- ===== цвета =====
 local C = {
-    bg = Color3.fromRGB(17, 17, 27), card = Color3.fromRGB(30, 30, 46),
-    card2 = Color3.fromRGB(44, 44, 68), text = Color3.fromRGB(235, 235, 245),
-    sub = Color3.fromRGB(150, 150, 175), accent = Color3.fromRGB(124, 92, 255),
-    on = Color3.fromRGB(60, 190, 110), off = Color3.fromRGB(70, 70, 95),
-    warn = Color3.fromRGB(240, 150, 50), bad = Color3.fromRGB(200, 80, 80),
+    bg = Color3.fromRGB(12, 14, 24), card = Color3.fromRGB(24, 28, 46),
+    card2 = Color3.fromRGB(40, 46, 72), text = Color3.fromRGB(235, 238, 250),
+    sub = Color3.fromRGB(140, 148, 175), accent = Color3.fromRGB(100, 125, 255),
+    on = Color3.fromRGB(70, 190, 140), off = Color3.fromRGB(62, 68, 96),
+    warn = Color3.fromRGB(240, 160, 60), bad = Color3.fromRGB(200, 85, 90),
 }
 
 -- ===== настройки =====
 local S = {
-    farm = true, bolts = true, coins = false, event = true, any = false,
-    speed = 40, height = 0, rejoin = true,
-    autoreset = false, limit = 50,
-    black = false, dark = false, light = false,
-    custom = {}, w = 235, h = 420,
+    afk = true, black = false, clock = true, dim = false, dimv = 60,
+    dark = false, light = false, fpsOn = false, fps = 20,
+    mute = false, hideplr = false, hidegui = false, gc = false,
+    timer = false, mins = 480, w = 235, h = 440,
 }
 pcall(function()
     if isfile(FILE) then
         for k, v in pairs(HttpService:JSONDecode(readfile(FILE))) do S[k] = v end
     end
 end)
-if type(S.custom) ~= "table" then S.custom = {} end
 local function save() pcall(writefile, FILE, HttpService:JSONEncode(S)) end
-
-local function hasWord(s, words)
-    for _, w in ipairs(words) do
-        if s:find(w, 1, true) then return true end
-    end
-    return false
-end
 
 local function viewport()
     local c = workspace.CurrentCamera
@@ -59,14 +42,15 @@ end
 
 -- ===== основа интерфейса =====
 pcall(function()
-    local old = ((gethui and gethui()) or game:GetService("CoreGui")):FindFirstChild("FarmGui")
+    local old = ((gethui and gethui()) or game:GetService("CoreGui")):FindFirstChild("NightHub")
     if old then old:Destroy() end
 end)
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "FarmGui"
+gui.Name = "NightHub"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
+gui.DisplayOrder = 50
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
 if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
@@ -75,7 +59,7 @@ if not gui.Parent then gui.Parent = lp:WaitForChild("PlayerGui") end
 local notifyBox = Instance.new("Frame", gui)
 notifyBox.AnchorPoint = Vector2.new(1, 1)
 notifyBox.Position = UDim2.new(1, -10, 1, -10)
-notifyBox.Size = UDim2.fromOffset(240, 300)
+notifyBox.Size = UDim2.fromOffset(250, 300)
 notifyBox.BackgroundTransparency = 1
 notifyBox.ZIndex = 7
 local nl = Instance.new("UIListLayout", notifyBox)
@@ -132,189 +116,20 @@ local function notify(text, color)
     end)
 end
 
--- ===== антиафк =====
+-- ===== анти-афк =====
 lp.Idled:Connect(function()
+    if not S.afk then return end
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- ===== перезаход, если один 30 секунд =====
-task.spawn(function()
-    local alone = 0
-    while task.wait(1) do
-        alone = (#Players:GetPlayers() <= 1) and alone + 1 or 0
-        if S.rejoin and alone >= 30 then
-            notify("🔄 Перезаход...", C.warn)
-            task.wait(1)
-            pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
-            alone = 0
-        end
-    end
-end)
-
--- ===== ноуклип =====
-RunService.Stepped:Connect(function()
-    if not S.farm or not lp.Character then return end
-    for _, p in ipairs(lp.Character:GetDescendants()) do
-        if p:IsA("BasePart") then p.CanCollide = false end
-    end
-end)
-
--- ===== автофарм =====
-local targets, last, targetCount = {}, 0, 0
-local visited = setmetatable({}, {__mode = "k"})
-local fti = firetouchinterest
-
-local function nameOf(o)
-    local s, p = o.Name, o.Parent
-    for _ = 1, 3 do
-        if p and p ~= workspace and p ~= game then
-            s = s .. "/" .. p.Name
-            p = p.Parent
-        else
-            break
-        end
-    end
-    return s:lower()
-end
-
-local function kind(o)
-    if not o:IsA("BasePart") or not o:FindFirstChildOfClass("TouchInterest") then return nil end
-    local m = o:FindFirstAncestorOfClass("Model")
-    if m and Players:GetPlayerFromCharacter(m) then return nil end
-    local n = nameOf(o)
-    for _, w in ipairs(S.custom) do
-        if n:find(w, 1, true) then return "custom" end
-    end
-    if hasWord(n, COIN_WORDS) then return "coin" end
-    if hasWord(n, BOLT_WORDS) then return "bolt" end
-    if hasWord(n, EVENT_WORDS) then return "event" end
-    if not hasWord(n, BLACK_WORDS) then return "any" end
-    return nil
-end
-
-local function rescan()
-    targets = {}
-    for _, o in ipairs(workspace:GetDescendants()) do
-        local k = kind(o)
-        if k == "custom" or (k == "bolt" and S.bolts) or (k == "coin" and S.coins)
-            or (k == "event" and S.event) or (k == "any" and S.any) then
-            table.insert(targets, o)
-        end
-    end
-    targetCount = #targets
-end
-
-local function touch(root, part)
-    if fti then
-        pcall(fti, root, part, 0)
-        pcall(fti, root, part, 1)
-    else
-        root.CFrame = part.CFrame
-    end
-end
-
+-- ===== FPS =====
+local fpsVal = 60
 RunService.Heartbeat:Connect(function(dt)
-    if not S.farm then return end
-    local char = lp.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum and hum.Health <= 0 then return end
-
-    if os.clock() - last > 1.5 then rescan() last = os.clock() end
-
-    local nearest, best = nil, math.huge
-    local now = os.clock()
-    for _, t in ipairs(targets) do
-        if t.Parent and not (visited[t] and now - visited[t] < 3) then
-            local d = (t.Position - root.Position).Magnitude
-            if d < best then nearest, best = t, d end
-        end
-    end
-    if not nearest then return end
-
-    local target = nearest.Position + Vector3.new(0, S.height, 0)
-    local dir = target - root.Position
-    local step = S.speed * dt
-
-    root.AssemblyLinearVelocity = Vector3.zero
-    if dir.Magnitude <= step then
-        root.CFrame = CFrame.new(target)
-        touch(root, nearest)
-        visited[nearest] = os.clock()
-    else
-        root.CFrame = root.CFrame + dir.Unit * step
-    end
+    if dt > 0 then fpsVal = fpsVal * 0.9 + (1 / dt) * 0.1 end
 end)
 
--- ===== авторесет при полном рюкзаке =====
-local lastReset = 0
-
-local function doReset()
-    pcall(function()
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.Health = 0 end
-    end)
-end
-
-local function fullText(t)
-    if t == "" then return false end
-    local l = t:lower()
-    for _, w in ipairs(FULL_WORDS) do
-        if l:find(w, 1, true) or t:find(w, 1, true) then return true end
-    end
-    local a, b = t:match("(%d+)%s*/%s*(%d+)")
-    if a and b and tonumber(b) == S.limit and tonumber(a) >= tonumber(b) then
-        return true
-    end
-    return false
-end
-
-local function isShown(o)
-    if o.TextTransparency and o.TextTransparency > 0.9 then return false end
-    local cur = o
-    while cur and cur ~= game do
-        if cur:IsA("GuiObject") and not cur.Visible then return false end
-        if cur:IsA("ScreenGui") and not cur.Enabled then return false end
-        cur = cur.Parent
-    end
-    return true
-end
-
-local function checkLabel(o)
-    if not S.autoreset then return end
-    if os.clock() - lastReset < 12 then return end
-    if not (o:IsA("TextLabel") or o:IsA("TextButton")) then return end
-    if o:IsDescendantOf(gui) then return end
-    if not fullText(o.Text) then return end
-    if not isShown(o) then return end
-    lastReset = os.clock()
-    notify("🎒 Рюкзак полон, ресет", C.warn)
-    doReset()
-end
-
-task.spawn(function()
-    local pg = lp:WaitForChild("PlayerGui")
-    local function watch(o)
-        if o:IsA("TextLabel") or o:IsA("TextButton") then
-            checkLabel(o)
-            o:GetPropertyChangedSignal("Text"):Connect(function() checkLabel(o) end)
-        end
-    end
-    for _, o in ipairs(pg:GetDescendants()) do watch(o) end
-    pg.DescendantAdded:Connect(watch)
-    while task.wait(1) do
-        if S.autoreset then
-            for _, o in ipairs(pg:GetDescendants()) do checkLabel(o) end
-        end
-    end
-end)
-
--- ===== функции экрана (все обратимые) =====
-local hooks = {}
-
+-- ===== помощник «запомнить и вернуть» =====
 local function newSaver()
     local store = setmetatable({}, {__mode = "k"})
     local function remember(o, props)
@@ -332,7 +147,9 @@ local function newSaver()
     return remember, restore
 end
 
--- чёрный экран
+local hooks = {}
+
+-- ===== чёрный экран, часы и затемнение =====
 local overlay = Instance.new("Frame", gui)
 overlay.Size = UDim2.new(1, 0, 1, 0)
 overlay.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -340,12 +157,114 @@ overlay.BorderSizePixel = 0
 overlay.ZIndex = 1
 overlay.Visible = false
 
-hooks.black = function(on)
-    overlay.Visible = on
-    pcall(function() RunService:Set3dRenderingEnabled(not on) end)
+local clockLbl = Instance.new("TextLabel", overlay)
+clockLbl.AnchorPoint = Vector2.new(0.5, 0.5)
+clockLbl.Position = UDim2.fromScale(0.5, 0.5)
+clockLbl.Size = UDim2.fromOffset(260, 24)
+clockLbl.BackgroundTransparency = 1
+clockLbl.TextColor3 = Color3.fromRGB(70, 74, 92)
+clockLbl.Font = Enum.Font.Gotham
+clockLbl.TextSize = 14
+clockLbl.Text = ""
+clockLbl.ZIndex = 1
+
+local dimFrame = Instance.new("Frame", gui)
+dimFrame.Size = UDim2.new(1, 0, 1, 0)
+dimFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+dimFrame.BorderSizePixel = 0
+dimFrame.ZIndex = 1
+dimFrame.Visible = false
+
+local function updateDim()
+    dimFrame.BackgroundTransparency = 1 - math.clamp(S.dimv, 0, 90) / 100
+    dimFrame.Visible = S.dim
 end
 
--- тёмная графика
+local circle -- объявлен ниже
+local function updateCircle()
+    if not circle then return end
+    local st = circle:FindFirstChildOfClass("UIStroke")
+    if st then
+        TweenService:Create(st, TweenInfo.new(0.2),
+            {Color = S.black and C.accent or Color3.new(1, 1, 1)}):Play()
+    end
+end
+
+hooks.black = function(on)
+    overlay.Visible = on
+    clockLbl.Visible = on and S.clock
+    pcall(function() RunService:Set3dRenderingEnabled(not on) end)
+    updateCircle()
+end
+hooks.clock = function() clockLbl.Visible = S.black and S.clock end
+hooks.dim = function() updateDim() end
+
+-- ===== лимит FPS =====
+local function applyFps()
+    pcall(function() setfpscap(S.fpsOn and S.fps or 60) end)
+end
+hooks.fpsOn = function() applyFps() end
+
+-- ===== облегчение =====
+local lRemember, lRestore = newSaver()
+local lightOn, lightSaved, lightConn = false, nil, nil
+
+local function lighten(o)
+    if o:IsA("ParticleEmitter") or o:IsA("Trail") or o:IsA("Beam")
+        or o:IsA("Fire") or o:IsA("Smoke") or o:IsA("Sparkles") then
+        lRemember(o, {"Enabled"})
+        o.Enabled = false
+    end
+end
+
+hooks.light = function(on)
+    if on == lightOn then return end
+    lightOn = on
+    if on then
+        lightSaved = {shadows = Lighting.GlobalShadows}
+        pcall(function()
+            lightSaved.q = settings().Rendering.QualityLevel
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+        Lighting.GlobalShadows = false
+        for _, o in ipairs(Lighting:GetChildren()) do
+            if o:IsA("PostEffect") or o:IsA("Atmosphere") then
+                pcall(function() lRemember(o, {"Enabled"}) o.Enabled = false end)
+            end
+        end
+        for _, o in ipairs(workspace:GetDescendants()) do pcall(lighten, o) end
+        lightConn = workspace.DescendantAdded:Connect(function(o) pcall(lighten, o) end)
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            pcall(function()
+                lRemember(terrain, {"WaterWaveSize", "WaterWaveSpeed", "WaterReflectance"})
+                terrain.WaterWaveSize = 0
+                terrain.WaterWaveSpeed = 0
+                terrain.WaterReflectance = 0
+            end)
+            pcall(function()
+                lightSaved.deco = gethiddenproperty(terrain, "Decoration")
+                sethiddenproperty(terrain, "Decoration", false)
+            end)
+        end
+    else
+        if lightConn then lightConn:Disconnect() lightConn = nil end
+        lRestore()
+        if lightSaved then
+            Lighting.GlobalShadows = lightSaved.shadows
+            if lightSaved.q then
+                pcall(function() settings().Rendering.QualityLevel = lightSaved.q end)
+            end
+            local terrain = workspace:FindFirstChildOfClass("Terrain")
+            if terrain and lightSaved.deco ~= nil then
+                pcall(sethiddenproperty, terrain, "Decoration", lightSaved.deco)
+            end
+            lightSaved = nil
+        end
+    end
+end
+
+-- ===== тёмная графика =====
 local dRemember, dRestore = newSaver()
 local darkOn, darkConn, darkLight, darkSkies = false, nil, nil, {}
 
@@ -358,10 +277,6 @@ local function darken(o)
     elseif o:IsA("Decal") or o:IsA("Texture") then
         dRemember(o, {"Transparency"})
         o.Transparency = 1
-    elseif o:IsA("ParticleEmitter") or o:IsA("Trail") or o:IsA("Beam")
-        or o:IsA("Fire") or o:IsA("Smoke") or o:IsA("Sparkles") then
-        dRemember(o, {"Enabled"})
-        o.Enabled = false
     end
 end
 
@@ -397,70 +312,117 @@ hooks.dark = function(on)
     end
 end
 
--- облегчение
-local lRemember, lRestore = newSaver()
-local lightOn, lightSaved = false, nil
+-- ===== без звука =====
+local mRemember, mRestore = newSaver()
+local muteOn, muteConn, muteVol = false, nil, nil
 
-hooks.light = function(on)
-    if on == lightOn then return end
-    lightOn = on
-    pcall(function() setfpscap(on and 20 or 60) end)
-    if on then
-        lightSaved = {shadows = Lighting.GlobalShadows}
-        pcall(function()
-            lightSaved.q = settings().Rendering.QualityLevel
-            settings().Rendering.QualityLevel = 1
-        end)
-        Lighting.GlobalShadows = false
-        for _, o in ipairs(Lighting:GetChildren()) do
-            if o:IsA("PostEffect") then
-                lRemember(o, {"Enabled"})
-                o.Enabled = false
-            end
-        end
-        for _, o in ipairs(workspace:GetDescendants()) do
-            if o:IsA("ParticleEmitter") or o:IsA("Trail") or o:IsA("Beam") then
-                lRemember(o, {"Enabled"})
-                o.Enabled = false
-            end
-        end
-    else
-        lRestore()
-        if lightSaved then
-            Lighting.GlobalShadows = lightSaved.shadows
-            if lightSaved.q then
-                pcall(function() settings().Rendering.QualityLevel = lightSaved.q end)
-            end
-            lightSaved = nil
-        end
+local function muteSound(o)
+    if o:IsA("Sound") then
+        mRemember(o, {"Volume"})
+        o.Volume = 0
     end
 end
 
+hooks.mute = function(on)
+    if on == muteOn then return end
+    muteOn = on
+    if on then
+        pcall(function()
+            local u = UserSettings():GetService("UserGameSettings")
+            muteVol = u.MasterVolume
+            u.MasterVolume = 0
+        end)
+        for _, o in ipairs(workspace:GetDescendants()) do pcall(muteSound, o) end
+        for _, o in ipairs(SoundService:GetDescendants()) do pcall(muteSound, o) end
+        muteConn = workspace.DescendantAdded:Connect(function(o) pcall(muteSound, o) end)
+    else
+        if muteConn then muteConn:Disconnect() muteConn = nil end
+        mRestore()
+        pcall(function()
+            if muteVol then UserSettings():GetService("UserGameSettings").MasterVolume = muteVol end
+        end)
+    end
+end
+
+-- ===== скрыть других игроков =====
+local hRemember, hRestore = newSaver()
+local hideOn = false
+
+hooks.hideplr = function(on)
+    hideOn = on
+    if not on then hRestore() end
+end
+
+task.spawn(function()
+    while task.wait(2) do
+        if hideOn then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= lp and plr.Character then
+                    for _, o in ipairs(plr.Character:GetDescendants()) do
+                        if o:IsA("BasePart") or o:IsA("Decal") then
+                            pcall(function() hRemember(o, {"Transparency"}) o.Transparency = 1 end)
+                        elseif o:IsA("Humanoid") then
+                            pcall(function() hRemember(o, {"DisplayDistanceType"}) o.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ===== скрыть интерфейс игры =====
+local gRemember, gRestore = newSaver()
+local guiOn, guiConn = false, nil
+
+local function hideGameGui(o)
+    if o:IsA("ScreenGui") and o ~= gui then
+        gRemember(o, {"Enabled"})
+        o.Enabled = false
+    end
+end
+
+hooks.hidegui = function(on)
+    if on == guiOn then return end
+    guiOn = on
+    local pg = lp:WaitForChild("PlayerGui")
+    if on then
+        for _, o in ipairs(pg:GetChildren()) do pcall(hideGameGui, o) end
+        guiConn = pg.ChildAdded:Connect(function(o) task.wait() pcall(hideGameGui, o) end)
+        pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
+    else
+        if guiConn then guiConn:Disconnect() guiConn = nil end
+        gRestore()
+        pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end)
+    end
+end
+
+-- ===== таймер закрытия =====
+local timerStart, timerWarned = os.clock(), false
+hooks.timer = function()
+    timerStart = os.clock()
+    timerWarned = false
+end
+
 -- ===== круглая кнопка =====
-local cx, cy = 10, viewport().Y * 0.3
-local circle = Instance.new("TextButton", gui)
+local cx, cy = viewport().X - 62, viewport().Y * 0.45
+circle = Instance.new("TextButton", gui)
 circle.Size = UDim2.fromOffset(52, 52)
 circle.Position = UDim2.fromOffset(cx, cy)
 circle.BackgroundColor3 = Color3.new(1, 1, 1)
 circle.TextColor3 = Color3.new(1, 1, 1)
 circle.Font = Enum.Font.GothamBold
 circle.TextSize = 26
-circle.Text = "⚡"
+circle.Text = "🌙"
 circle.AutoButtonColor = false
 circle.ZIndex = 5
 Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
 local cGrad = Instance.new("UIGradient", circle)
-cGrad.Color = ColorSequence.new(Color3.fromRGB(150, 90, 255), Color3.fromRGB(255, 120, 60))
+cGrad.Color = ColorSequence.new(Color3.fromRGB(40, 50, 120), Color3.fromRGB(120, 80, 210))
 cGrad.Rotation = 45
 local cStroke = Instance.new("UIStroke", circle)
 cStroke.Thickness = 3
 cStroke.Color = Color3.new(1, 1, 1)
-
-local function updateCircle()
-    TweenService:Create(cStroke, TweenInfo.new(0.2),
-        {Color = S.farm and C.on or Color3.new(1, 1, 1)}):Play()
-end
-hooks.farm = function() updateCircle() end
 
 -- ===== меню =====
 local frame = Instance.new("CanvasGroup", gui)
@@ -495,7 +457,6 @@ end
 clampSize()
 placeMenu()
 
--- шапка
 local title = Instance.new("TextLabel", frame)
 title.Position = UDim2.new(0, 12, 0, 0)
 title.Size = UDim2.new(1, -50, 0, 34)
@@ -504,7 +465,7 @@ title.TextColor3 = C.text
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "🎃 Farm Hub"
+title.Text = "🌙 Night Hub"
 
 local closeBtn = Instance.new("TextButton", frame)
 closeBtn.Position = UDim2.new(1, -34, 0, 4)
@@ -516,14 +477,13 @@ closeBtn.TextSize = 14
 closeBtn.Text = "✕"
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(1, 0)
 
--- вкладки
 local tabBar = Instance.new("Frame", frame)
 tabBar.Position = UDim2.new(0, 6, 0, 36)
 tabBar.Size = UDim2.new(1, -12, 0, 28)
 tabBar.BackgroundTransparency = 1
 
 local pages, tabs = {}, {}
-local tabNames = {"⚡ Фарм", "🌙 Экран", "🔧 Сервис"}
+local tabNames = {"🌙 Ночь", "⚙ Нагрузка", "📊 Инфо"}
 
 for i = 1, 3 do
     local sf = Instance.new("ScrollingFrame", frame)
@@ -614,6 +574,16 @@ local function section(page, text)
     l.Text = "  " .. text
 end
 
+local switches = {}
+
+local function setFlag(key, val)
+    if S[key] == val then return end
+    S[key] = val
+    if switches[key] then switches[key](true) end
+    if hooks[key] then pcall(hooks[key], val) end
+    save()
+end
+
 local function switchRow(page, icon, label, key)
     local row = card(page, 38)
     rowLabels(row, icon, label)
@@ -639,22 +609,19 @@ local function switchRow(page, icon, label, key)
         TweenService:Create(knob, info, {Position = UDim2.new(0, on and 22 or 2, 0.5, 0)}):Play()
     end
     render(false)
+    switches[key] = render
 
     local hit = Instance.new("TextButton", row)
     hit.Size = UDim2.new(1, 0, 1, 0)
     hit.BackgroundTransparency = 1
     hit.Text = ""
     hit.MouseButton1Click:Connect(function()
-        S[key] = not S[key]
-        render(true)
-        save()
-        last = 0
-        if hooks[key] then pcall(hooks[key], S[key]) end
+        setFlag(key, not S[key])
         notify(icon .. " " .. label .. ": " .. (S[key] and "ВКЛ" or "ВЫКЛ"), S[key] and C.on or C.bad)
     end)
 end
 
-local function numberRow(page, icon, label, key)
+local function numberRow(page, icon, label, key, mn, mx, onChange)
     local row = card(page, 38)
     rowLabels(row, icon, label)
     local tb = Instance.new("TextBox", row)
@@ -671,8 +638,11 @@ local function numberRow(page, icon, label, key)
     tb.FocusLost:Connect(function()
         local n = tonumber(tb.Text)
         if n then
+            n = math.clamp(math.floor(n), mn, mx)
             S[key] = n
+            tb.Text = tostring(n)
             save()
+            if onChange then pcall(onChange, n) end
             notify(icon .. " " .. label .. ": " .. n)
         else
             tb.Text = tostring(S[key])
@@ -717,137 +687,84 @@ local function infoRow(page, text, h)
     l.TextWrapped = true
     l.TextXAlignment = Enum.TextXAlignment.Left
     l.Text = text
-    return l
 end
 
--- ===== вкладка 1: фарм =====
+local function statRow(page, icon, label)
+    local row = card(page, 38)
+    rowLabels(row, icon, label)
+    local v = Instance.new("TextLabel", row)
+    v.AnchorPoint = Vector2.new(1, 0.5)
+    v.Position = UDim2.new(1, -10, 0.5, 0)
+    v.Size = UDim2.fromOffset(100, 26)
+    v.BackgroundTransparency = 1
+    v.TextColor3 = C.text
+    v.Font = Enum.Font.GothamBold
+    v.TextSize = 14
+    v.TextXAlignment = Enum.TextXAlignment.Right
+    v.Text = "—"
+    return v
+end
+
+-- ===== пресеты =====
+local NIGHT = {black = true, clock = true, light = true, fpsOn = true, mute = true, afk = true, gc = true}
+local RESET = {black = false, dim = false, dark = false, light = false, fpsOn = false,
+    mute = false, hideplr = false, hidegui = false}
+
+local function applyPreset(map)
+    for k, v in pairs(map) do setFlag(k, v) end
+end
+
+-- ===== вкладка 1: ночь =====
 local p1, p2, p3 = pages[1], pages[2], pages[3]
 
-section(p1, "ГЛАВНОЕ")
-switchRow(p1, "▶", "Автофарм", "farm")
-local statusLbl = infoRow(p1, "🎯 Целей найдено: 0", 32)
-section(p1, "ЦЕЛИ")
-switchRow(p1, "⚡", "Молнии", "bolts")
-switchRow(p1, "🪙", "Монеты", "coins")
-switchRow(p1, "🎃", "Конфеты и тыквы", "event")
-switchRow(p1, "🧲", "Все касаемые", "any")
-section(p1, "ПАРАМЕТРЫ")
-numberRow(p1, "🚀", "Скорость", "speed")
-numberRow(p1, "↕", "Высота", "height")
-section(p1, "РЮКЗАК")
-switchRow(p1, "🎒", "Авторесет", "autoreset")
-numberRow(p1, "🔢", "Лимит", "limit")
-
-task.spawn(function()
-    while task.wait(1) do
-        statusLbl.Text = "🎯 Целей найдено: " .. targetCount
-    end
+section(p1, "БЫСТРО")
+actionRow(p1, "🌙", "Ночной режим", function()
+    applyPreset(NIGHT)
+    notify("🌙 Ночной режим включён", C.accent)
 end)
+actionRow(p1, "☀", "Вернуть всё", function()
+    applyPreset(RESET)
+    notify("☀ Всё возвращено", C.warn)
+end)
+section(p1, "ЭКРАН")
+switchRow(p1, "⬛", "Чёрный экран", "black")
+switchRow(p1, "🕒", "Часы на чёрном", "clock")
+switchRow(p1, "🌗", "Затемнение", "dim")
+numberRow(p1, "🔆", "Затемнить на %", "dimv", 0, 90, updateDim)
+section(p1, "СЕССИЯ")
+switchRow(p1, "🛡", "Анти-АФК", "afk")
+switchRow(p1, "⏳", "Таймер закрытия", "timer")
+numberRow(p1, "⏱", "Минут до закрытия", "mins", 1, 1440, function() hooks.timer() end)
 
--- ===== вкладка 2: экран =====
-section(p2, "ЭКРАН")
-switchRow(p2, "⬛", "Чёрный экран", "black")
-switchRow(p2, "🌑", "Тёмная графика", "dark")
+-- ===== вкладка 2: нагрузка =====
+section(p2, "ПРОЦЕССОР И ГРАФИКА")
+switchRow(p2, "🎞", "Лимит FPS", "fpsOn")
+numberRow(p2, "🔢", "FPS", "fps", 5, 120, applyFps)
 switchRow(p2, "🍃", "Облегчение", "light")
-infoRow(p2, "Для ночи: включи «Чёрный экран» и поставь яркость телефона на минимум. Всё обратимо: выключил, и картинка вернулась.", 64)
-
--- ===== вкладка 3: сервис =====
-section(p3, "ЗАЩИТА")
-switchRow(p3, "🔄", "Перезаход (один 30с)", "rejoin")
-section(p3, "ИНСТРУМЕНТЫ")
-
-local function findNearby()
-    local char = lp.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then notify("Нет персонажа", C.bad) return end
-
-    local groups = {}
-    for _, o in ipairs(workspace:GetDescendants()) do
-        if o:IsA("BasePart") and o:FindFirstChildOfClass("TouchInterest") then
-            local m = o:FindFirstAncestorOfClass("Model")
-            if not (m and Players:GetPlayerFromCharacter(m)) then
-                local d = (o.Position - root.Position).Magnitude
-                if d <= 120 then
-                    local g = groups[o.Name] or {name = o.Name, n = 0, d = math.huge}
-                    g.n += 1
-                    if d < g.d then g.d = d end
-                    groups[o.Name] = g
-                end
-            end
-        end
-    end
-
-    for _, ch in ipairs(p3:GetChildren()) do
-        if ch.Name == "res" then ch:Destroy() end
-    end
-
-    local arr = {}
-    for _, g in pairs(groups) do table.insert(arr, g) end
-    table.sort(arr, function(a, b) return a.d < b.d end)
-
-    if #arr == 0 then
-        notify("Рядом ничего не найдено", C.warn)
-        return
-    end
-    notify("Найдено видов: " .. #arr .. ". Смотри внизу вкладки", C.on)
-
-    for i = 1, math.min(#arr, 10) do
-        local g = arr[i]
-        local row = card(p3, 38)
-        row.Name = "res"
-        row.LayoutOrder = 100 + i
-        rowLabels(row, "➕", g.name .. "  ×" .. g.n .. "  (" .. math.floor(g.d) .. "м)")
-        local hit = Instance.new("TextButton", row)
-        hit.Size = UDim2.new(1, 0, 1, 0)
-        hit.BackgroundTransparency = 1
-        hit.Text = ""
-        hit.MouseButton1Click:Connect(function()
-            local key = g.name:lower()
-            for _, w in ipairs(S.custom) do
-                if w == key then notify("Уже добавлено", C.warn) return end
-            end
-            table.insert(S.custom, key)
-            save()
-            last = 0
-            row.BackgroundColor3 = C.on
-            notify("➕ Добавлено: " .. g.name, C.on)
-        end)
-    end
-end
-
-actionRow(p3, "🔍", "Найти рядом", findNearby)
-actionRow(p3, "💀", "Ресет сейчас", function()
-    notify("💀 Ресет персонажа", C.warn)
-    doReset()
-end)
-actionRow(p3, "🗑", "Сбросить свои цели", function()
-    S.custom = {}
-    save()
-    last = 0
-    notify("🗑 Свои цели сброшены", C.warn)
-end)
-actionRow(p3, "📋", "Список объектов", function()
-    local seen = {}
-    for _, o in ipairs(workspace:GetDescendants()) do
-        if o:IsA("BasePart") and o:FindFirstChildOfClass("TouchInterest") and not seen[o.Name] then
-            seen[o.Name] = true
-            print(o:GetFullName())
-        end
-    end
-    notify("📋 Список в консоли")
-end)
-actionRow(p3, "🔤", "Список текстов", function()
-    local pg = lp:WaitForChild("PlayerGui")
-    for _, o in ipairs(pg:GetDescendants()) do
-        if (o:IsA("TextLabel") or o:IsA("TextButton")) and not o:IsDescendantOf(gui)
-            and o.Text ~= "" and #o.Text < 60 and isShown(o) then
-            print(o:GetFullName() .. " = " .. o.Text)
-        end
-    end
-    notify("🔤 Список в консоли")
+switchRow(p2, "🌑", "Тёмная графика", "dark")
+section(p2, "ЛИШНЕЕ")
+switchRow(p2, "🔇", "Без звука", "mute")
+switchRow(p2, "👻", "Скрыть игроков", "hideplr")
+switchRow(p2, "🖼", "Скрыть интерфейс игры", "hidegui")
+infoRow(p2, "Если в фарм-скрипте включён авторесет, «Скрыть интерфейс игры» держи выключенным: он читает надписи рюкзака.", 56)
+section(p2, "ПАМЯТЬ")
+switchRow(p2, "🧹", "Автоочистка (5 мин)", "gc")
+actionRow(p2, "🗑", "Очистить сейчас", function()
+    local before = Stats:GetTotalMemoryUsageMb()
+    pcall(collectgarbage, "collect")
+    notify("🧹 Память очищена (было " .. math.floor(before) .. " МБ)", C.on)
 end)
 
--- ===== уголок для изменения размера =====
+-- ===== вкладка 3: инфо =====
+section(p3, "СЕЙЧАС")
+local stFps = statRow(p3, "🎞", "FPS")
+local stPing = statRow(p3, "📡", "Пинг")
+local stMem = statRow(p3, "💾", "Память")
+local stUp = statRow(p3, "🕒", "В игре")
+local stLeft = statRow(p3, "⏳", "До закрытия")
+infoRow(p3, "Night Hub работает отдельно от других скриптов и их не трогает. Все функции обратимы кнопкой «Вернуть всё».", 56)
+
+-- ===== уголок изменения размера =====
 local handle = Instance.new("TextButton", frame)
 handle.Size = UDim2.fromOffset(28, 28)
 handle.Position = UDim2.new(1, -28, 1, -28)
@@ -933,9 +850,59 @@ UIS.InputEnded:Connect(function(i)
     end
 end)
 
--- ===== применить сохранённое после перезахода =====
-for _, k in ipairs({"black", "dark", "light"}) do
+-- ===== фоновый цикл: инфо, часы, память, таймер =====
+local function fmt(sec)
+    sec = math.max(0, math.floor(sec))
+    return string.format("%02d:%02d:%02d", sec // 3600, (sec % 3600) // 60, sec % 60)
+end
+
+task.spawn(function()
+    local lastGc, tick = os.clock(), 0
+    while task.wait(1) do
+        tick += 1
+        local ping = 0
+        pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+        local mem = math.floor(Stats:GetTotalMemoryUsageMb())
+        local fpsText = math.floor(fpsVal + 0.5)
+
+        stFps.Text = tostring(fpsText)
+        stPing.Text = ping .. " мс"
+        stMem.Text = mem .. " МБ"
+        stUp.Text = fmt(os.clock() - T0)
+
+        if clockLbl.Visible then
+            clockLbl.Text = fmt(os.clock() - T0) .. "  •  " .. fpsText .. " FPS  •  " .. ping .. " мс"
+            if tick % 40 == 0 then
+                clockLbl.Position = UDim2.fromScale(math.random(18, 82) / 100, math.random(15, 85) / 100)
+            end
+        end
+
+        if S.gc and os.clock() - lastGc > 300 then
+            lastGc = os.clock()
+            pcall(collectgarbage, "collect")
+            notify("🧹 Память очищена", C.on)
+        end
+
+        if S.timer then
+            local left = S.mins * 60 - (os.clock() - timerStart)
+            stLeft.Text = fmt(left)
+            if left <= 60 and not timerWarned then
+                timerWarned = true
+                notify("⏳ Игра закроется через минуту", C.warn)
+            end
+            if left <= 0 then
+                pcall(function() game:Shutdown() end)
+            end
+        else
+            stLeft.Text = "выкл"
+        end
+    end
+end)
+
+-- ===== применить сохранённое =====
+updateDim()
+for _, k in ipairs({"black", "dark", "light", "fpsOn", "mute", "hideplr", "hidegui"}) do
     if S[k] then pcall(hooks[k], true) end
 end
 updateCircle()
-notify("🎃 Скрипт запущен", C.on)
+notify("🌙 Night Hub запущен", C.accent)
