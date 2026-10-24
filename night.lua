@@ -1,4 +1,9 @@
--- Ожидание базовой загрузки
+-- =======================================================
+-- НАСТРОЙКИ
+-- =======================================================
+local ICON_URL = "https://raw.githubusercontent.com/wwqruvvzjsxsxs/MM2script/main/file_00000000149081f4a364411ebc997e59.png"
+
+-- Ожидание базовой загрузки игры
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
@@ -6,9 +11,10 @@ end
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 
--- Безопасный выбор родителя GUI
+-- Безопасный контейнер под UI
 local targetParent = (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui", 30)
 
 -- Удаляем старое меню при повторном запуске
@@ -23,37 +29,62 @@ screenGui.DisplayOrder = 999999
 screenGui.Parent = targetParent
 
 -- =======================================================
--- 1. ПОЛНЫЙ ЧЕРНЫЙ ЭКРАН (True Black #000000 для AMOLED)
+-- 1. ЧЕРНЫЙ ЭКРАН (ПРОПУСКАЕТ ВСЕ КЛИКИ В ИГРУ)
 -- =======================================================
-local blackOverlay = Instance.new("TextButton")
+local blackOverlay = Instance.new("Frame")
 blackOverlay.Name = "BlackOverlay"
 blackOverlay.Size = UDim2.new(1, 0, 1, 0)
 blackOverlay.Position = UDim2.new(0, 0, 0, 0)
 blackOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 blackOverlay.BorderSizePixel = 0
 blackOverlay.ZIndex = 1000000
-blackOverlay.Text = "ДВАЖДЫ НАЖМИ НА ЭКРАН, ЧТОБЫ ВЕРНУТЬСЯ"
-blackOverlay.TextColor3 = Color3.fromRGB(40, 40, 40)
-blackOverlay.TextSize = 13
-blackOverlay.Font = Enum.Font.GothamMedium
+blackOverlay.Active = false -- Не блокирует нажатия автокликера
 blackOverlay.Visible = false
 blackOverlay.Parent = screenGui
 
-local lastTap = 0
-blackOverlay.MouseButton1Click:Connect(function()
+local infoText = Instance.new("TextLabel")
+infoText.Size = UDim2.new(1, 0, 0, 40)
+infoText.Position = UDim2.new(0, 0, 0.45, 0)
+infoText.BackgroundTransparency = 1
+infoText.Text = "3 БЫСТРЫХ ТАПА ДЛЯ ВЫХОДА\n(КЛИКИ ИДУТ В ИГРУ)"
+infoText.TextColor3 = Color3.fromRGB(35, 35, 35) -- Тусклый цвет, диоды выключены
+infoText.TextSize = 13
+infoText.Font = Enum.Font.GothamMedium
+infoText.Parent = blackOverlay
+
+-- Логика разблокировки по 3 быстрым тапам
+local tapCount = 0
+local lastTapTime = 0
+
+local function checkTripleTap()
+    if not blackOverlay.Visible then return end
     local now = tick()
-    if now - lastTap < 0.45 then
-        blackOverlay.Visible = false
+    if now - lastTapTime < 0.5 then
+        tapCount = tapCount + 1
+    else
+        tapCount = 1
     end
-    lastTap = now
+    lastTapTime = now
+
+    if tapCount >= 3 then
+        blackOverlay.Visible = false
+        tapCount = 0
+    end
+end
+
+UserInputService.TouchTapInWorld:Connect(checkTripleTap)
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        checkTripleTap()
+    end
 end)
 
 -- =======================================================
--- 2. ГЛАВНОЕ ОКНО МЕНЮ С КОПИРАЙТОМ
+-- 2. ГЛАВНОЕ ОКНО МЕНЮ
 -- =======================================================
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 175, 0, 205) -- Немного увеличили высоту под футер
+mainFrame.Size = UDim2.new(0, 175, 0, 210)
 mainFrame.Position = UDim2.new(0.04, 0, 0.25, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 mainFrame.BorderSizePixel = 0
@@ -97,24 +128,36 @@ local lagBtn   = makeButton("⚡ NoLag + Темнота", 69, Color3.fromRGB(48,
 local fpsBtn   = makeButton("❄️ Ограничить 15 FPS", 104, Color3.fromRGB(25, 48, 42))
 local closeBtn = makeButton("❌ Свернуть меню", 139, Color3.fromRGB(55, 25, 25))
 
--- Авторский знак (закреплен внизу рамки, аккуратно и статично)
-local watermark = Instance.new("TextLabel")
-watermark.Name = "Watermark"
-watermark.Size = UDim2.new(1, 0, 0, 24)
-watermark.Position = UDim2.new(0, 0, 0, 175)
-watermark.BackgroundTransparency = 1
-watermark.Text = "CHLEN AN SY? 🍌🙅‍♀️"
-watermark.TextColor3 = Color3.fromRGB(130, 130, 145)
-watermark.Font = Enum.Font.GothamMedium
-watermark.TextSize = 10
-watermark.Parent = mainFrame
+-- Авторский знак / Водяной знак
+local watermarkContainer = Instance.new("Frame")
+watermarkContainer.Name = "WatermarkContainer"
+watermarkContainer.Size = UDim2.new(0.88, 0, 0, 24)
+watermarkContainer.Position = UDim2.new(0.06, 0, 0, 176)
+watermarkContainer.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+watermarkContainer.BorderSizePixel = 0
+watermarkContainer.Parent = mainFrame
 
--- Логика черного экрана
+local wmCorner = Instance.new("UICorner")
+wmCorner.CornerRadius = UDim.new(0, 6)
+wmCorner.Parent = watermarkContainer
+
+local watermark = Instance.new("TextLabel")
+watermark.Name = "WatermarkText"
+watermark.Size = UDim2.new(1, 0, 1, 0)
+watermark.BackgroundTransparency = 1
+watermark.Text = "8====D • CHLEN AN SY"
+watermark.TextColor3 = Color3.fromRGB(120, 120, 135)
+watermark.Font = Enum.Font.Code
+watermark.TextSize = 11
+watermark.Parent = watermarkContainer
+
+-- Включение черного экрана
 blackBtn.MouseButton1Click:Connect(function()
     blackOverlay.Visible = true
+    tapCount = 0
 end)
 
--- Логика NoLag
+-- Снижение нагрузки и темный режим
 local lagReduced = false
 lagBtn.MouseButton1Click:Connect(function()
     if lagReduced then return end
@@ -144,9 +187,7 @@ lagBtn.MouseButton1Click:Connect(function()
         end
     end
 
-    for _, v in ipairs(workspace:GetDescendants()) do
-        cleanObject(v)
-    end
+    for _, v in ipairs(workspace:GetDescendants()) do cleanObject(v) end
     workspace.DescendantAdded:Connect(cleanObject)
 
     if RunService:IsClient() and setrenderstepped then
@@ -154,7 +195,7 @@ lagBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Логика 15 FPS
+-- Ограничение кадров
 local isCapped = false
 fpsBtn.MouseButton1Click:Connect(function()
     if not isCapped then
@@ -176,22 +217,42 @@ fpsBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Сворачивание панели
-local miniToggle = Instance.new("TextButton")
-miniToggle.Size = UDim2.new(0, 32, 0, 32)
+-- =======================================================
+-- 3. ПЛАВАЮЩАЯ КРУГЛАЯ ИКОНКА (С ТВОИМ PNG)
+-- =======================================================
+local miniToggle = Instance.new("ImageButton")
+miniToggle.Name = "MiniToggle"
+miniToggle.Size = UDim2.new(0, 42, 0, 42)
 miniToggle.Position = UDim2.new(0.04, 0, 0.25, 0)
-miniToggle.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-miniToggle.Text = "🌙"
-miniToggle.TextSize = 14
+miniToggle.BackgroundTransparency = 1
 miniToggle.Visible = false
 miniToggle.Active = true
 miniToggle.Draggable = true
 miniToggle.Parent = screenGui
 
-local miniCorner = Instance.new("UICorner")
-miniCorner.CornerRadius = UDim.new(0, 8)
-miniCorner.Parent = miniToggle
+-- Автоматическая обрезка в ровный круг
+local roundCorner = Instance.new("UICorner")
+roundCorner.CornerRadius = UDim.new(1, 0)
+roundCorner.Parent = miniToggle
 
+-- Загрузка PNG по ссылке в Дельту
+task.spawn(function()
+    local filename = "custom_night_icon.png"
+    pcall(function()
+        if not isfile or not isfile(filename) then
+            if writefile then
+                writefile(filename, game:HttpGet(ICON_URL))
+            end
+        end
+        if getcustomasset then
+            miniToggle.Image = getcustomasset(filename)
+        elseif getsynasset then
+            miniToggle.Image = getsynasset(filename)
+        end
+    end)
+end)
+
+-- Сворачивание и разворачивание
 closeBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
     miniToggle.Visible = true
