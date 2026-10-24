@@ -1,3 +1,24 @@
+local env = getgenv and getgenv() or _G
+if env.NIGHT_HUB_JOB == game.JobId then
+    print("[Night Hub] уже запущен на этом сервере")
+    return
+end
+env.NIGHT_HUB_JOB = game.JobId
+
+-- ===== НАСТРОЙКИ ЗАПУСКА =====
+local DELAY = 75       -- через сколько секунд включить экран (0 = не включать сам)
+local MODE = "black"   -- "black" = чёрный экран, "dim" = очень тёмный, но картинка остаётся
+local SELF_URL = "https://raw.githubusercontent.com/wwqruvvzjsxsxs/MM2script/refs/heads/main/night.lua"
+
+local ok, err = pcall(function()
+
+print("[Night Hub] запуск...")
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- после перезахода запуститься снова
+local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+if q then q('loadstring(game:HttpGet("' .. SELF_URL .. '"))()') end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
@@ -33,6 +54,8 @@ pcall(function()
         for k, v in pairs(HttpService:JSONDecode(readfile(FILE))) do S[k] = v end
     end
 end)
+local AUTO = DELAY > 0
+if AUTO then S.black = false S.dim = false end -- экран включится сам через DELAY
 local function save() pcall(writefile, FILE, HttpService:JSONEncode(S)) end
 
 local function viewport()
@@ -914,3 +937,25 @@ for _, k in ipairs({"black", "dark", "light", "fpsOn", "mute", "hideplr", "hideg
 end
 updateCircle()
 notify("🌙 Night Hub запущен", C.accent)
+print("[Night Hub] запущен, кружок 🌙 на экране")
+
+-- ===== автовключение экрана через DELAY секунд =====
+if AUTO then
+    notify("⏱ Экран затемнится через " .. DELAY .. " с", C.sub)
+    task.spawn(function()
+        task.wait(DELAY)
+        if MODE == "black" then
+            setFlag("black", true)
+        else
+            S.dimv = 90
+            setFlag("dim", true)
+            updateDim()
+        end
+        notify("🌙 Экран затемнён автоматически", C.accent)
+        print("[Night Hub] экран затемнён автоматически")
+    end)
+end
+
+end)
+
+if not ok then warn("[Night Hub] ошибка: " .. tostring(err)) end
